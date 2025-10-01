@@ -1,6 +1,6 @@
 # PatCID
 
-This is the repository for [PatCID: an open-access dataset of chemical structures in patent documents](https://www.nature.com/articles/s41467-024-50779-y).
+This is the repository for [PatCID: an open-access dataset of chemical structures in patent documents](https://www.nature.com/articles/s41467-024-50779-y). PatCID is a dataset of molecules linked to the patent document displaying them.
 
 ![MolGrapher](assets/introduction.png)
 
