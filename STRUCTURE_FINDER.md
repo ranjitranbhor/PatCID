@@ -73,6 +73,22 @@ Word documents keep their page numbers only when LibreOffice is installed
 back to reading the images embedded in the `.docx` archive and numbers them
 sequentially.
 
+### Google Colab
+
+Open [`notebooks/find_structure_in_documents.ipynb`](./notebooks/find_structure_in_documents.ipynb)
+in Colab — it installs everything, mounts Drive, takes uploads and runs the
+search. Two runtime facts drive the setup there:
+
+- **Use the DECIMER recognition engine on Colab.** MolGrapher's `setup.py`
+  constructs torch wheel URLs pinned to CPython 3.11, so `pip install -e ".[cpu]"`
+  fails on Colab's current Python. DECIMER is pip-installable on any runtime and
+  actually scored slightly higher than MolGrapher on D2C-RND (67.2% vs 63.0%);
+  you only give up some CPU speed. If you do get a 3.11 runtime, the notebook
+  installs MolGrapher too.
+- **Put the workspace on Drive** (`use_drive=True`). The ~1.5 GB of weights and,
+  more importantly, the per-document extraction cache then survive runtime
+  restarts.
+
 ---
 
 ## Use it
