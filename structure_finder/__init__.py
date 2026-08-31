@@ -28,6 +28,7 @@ Quick start
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
 from .documents import DEFAULT_DPI, Document, collect_documents
@@ -97,6 +98,10 @@ def find_structure(
     """
     if isinstance(smiles, str):
         smiles = [smiles]
+    if isinstance(documents, (str, Path)):
+        # Iterating a bare string yields characters, so wrap it rather than
+        # searching for documents named "c", "o", "n", ...
+        documents = [documents]
 
     space = resolve_workspace(workspace=workspace, use_drive=use_drive)
 
