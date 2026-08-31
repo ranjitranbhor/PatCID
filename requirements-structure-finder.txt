@@ -4,7 +4,7 @@
 # These alone give you the text scan, the heuristic segmenter and all reporting.
 rdkit>=2023.9
 pymupdf>=1.24
-numpy>=1.23
+numpy>=1.23,<2      # see the DECIMER-Segmentation note below
 pillow>=9.0
 opencv-python>=4.8
 python-docx>=1.1        # optional: text extraction from .docx
@@ -21,6 +21,21 @@ python-docx>=1.1        # optional: text extraction from .docx
 
 # --- Segmentation: DECIMER-Segmentation (PatCID's choice) ------------------
 # decimer-segmentation>=1.5
+#
+# Two install traps, both worth knowing:
+#
+# 1. Its metadata caps tensorflow at <=2.15.1, and TensorFlow has no CPython
+#    3.12 wheel below 2.16 — so on Python 3.12 pip reports
+#    ResolutionImpossible across every decimer-segmentation version.
+#    Work around it with --no-deps plus its real dependencies:
+#      pip install --no-deps decimer-segmentation
+#      pip install scikit-image opencv-python matplotlib IPython PyMuPDF \
+#                  numba scipy requests pillow
+#
+# 2. numpy MUST stay below 2.0. Its Mask R-CNN uses
+#    np.VisibleDeprecationWarning, which numpy 2.0 removed. Verified: with
+#    numpy 1.26.4 the model builds correctly on TensorFlow 2.19.1, so the
+#    2.15.1 cap in the metadata is stricter than the code requires.
 
 # --- Classification: MolClassifier (Clean / Markush / Trash) ---------------
 # git clone https://github.com/DS4SD/MolClassifier

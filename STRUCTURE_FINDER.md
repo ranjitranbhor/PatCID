@@ -79,12 +79,21 @@ Open [`notebooks/find_structure_in_documents.ipynb`](./notebooks/find_structure_
 in Colab — it installs everything, mounts Drive, takes uploads and runs the
 search. Two runtime facts drive the setup there:
 
+- **`pip install decimer-segmentation` fails on Colab, and the notebook works
+  around it.** Its metadata caps `tensorflow<=2.15.1`, and TensorFlow has no
+  CPython 3.12 wheel below 2.16, so on Colab's Python that constraint cannot be
+  satisfied and pip reports `ResolutionImpossible` across every version. The
+  real constraint is **numpy < 2** — the Mask R-CNN uses
+  `np.VisibleDeprecationWarning`, removed in numpy 2.0. With numpy 1.26.4 the
+  model builds correctly on TensorFlow 2.19.1, so the notebook pins numpy,
+  installs the package with `--no-deps`, and supplies its dependencies itself.
+  Pinning numpy needs one session restart, which the install cell performs.
 - **Use the DECIMER recognition engine on Colab.** MolGrapher's `setup.py`
   constructs torch wheel URLs pinned to CPython 3.11, so `pip install -e ".[cpu]"`
-  fails on Colab's current Python. DECIMER is pip-installable on any runtime and
-  actually scored slightly higher than MolGrapher on D2C-RND (67.2% vs 63.0%);
-  you only give up some CPU speed. If you do get a 3.11 runtime, the notebook
-  installs MolGrapher too.
+  fails on Colab's current Python. DECIMER is pip-installable there and actually
+  scored slightly higher than MolGrapher on D2C-RND (67.2% vs 63.0%); you only
+  give up some CPU speed. If you do get a 3.11 runtime, the notebook installs
+  MolGrapher too.
 - **Put the workspace on Drive** (`use_drive=True`). The ~1.5 GB of weights and,
   more importantly, the per-document extraction cache then survive runtime
   restarts.
