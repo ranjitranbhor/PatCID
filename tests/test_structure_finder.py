@@ -473,3 +473,141 @@ def test_collect_documents_rejects_non_paths_clearly():
 def test_collect_documents_still_accepts_a_list(corpus):
     documents = collect_documents([str(corpus / "text_only.pdf")])
     assert [d.name for d in documents] == ["text_only.pdf"]
+
+
+# ---------------------------------------------------------------------------
+# Keras 3 compatibility (DECIMER-Segmentation weight loading)
+# ---------------------------------------------------------------------------
+
+
+def test_importing_the_package_sets_legacy_keras_env():
+    """TensorFlow reads TF_USE_LEGACY_KERAS at ITS import time.
+
+    Importing structure_finder must therefore set it, so that a later
+    `import tensorflow` picks up Keras 2 and mrcnn's .h5 loader works.
+    """
+    import os
+    import subprocess
+
+    # A fresh interpreter, so an already-set variable cannot mask a regression.
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import os; os.environ.pop('TF_USE_LEGACY_KERAS', None);"
+            "import sys; sys.path.insert(0, %r);" % str(Path(__file__).resolve().parent.parent)
+            + "import structure_finder;"
+            "print(os.environ.get('TF_USE_LEGACY_KERAS'))",
+        ],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "TF_USE_LEGACY_KERAS": ""},
+    )
+    assert result.stdout.strip().endswith("1"), result.stdout + result.stderr
+
+
+def test_enable_legacy_keras_returns_false_without_tensorflow(monkeypatch):
+    """No TensorFlow installed is not an error - the engine just is not usable."""
+    import builtins
+
+    from structure_finder.compat import enable_legacy_keras
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "tensorflow":
+            raise ImportError("no tensorflow")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    assert enable_legacy_keras() is False
+
+
+def test_legacy_keras_error_names_the_remedy(monkeypatch):
+    """A Keras 3 session that cannot be fixed must say to restart, not just fail."""
+    import builtins
+    import types
+
+    from structure_finder.compat import LegacyKerasUnavailable, enable_legacy_keras
+
+    fake_tf = types.SimpleNamespace(keras=types.SimpleNamespace(__name__="keras.api"))
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "tensorflow":
+            return fake_tf
+        if name == "tf_keras":
+            return types.SimpleNamespace()  # installed, but not active
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    with pytest.raises(LegacyKerasUnavailable, match="[Rr]estart"):
+        enable_legacy_keras()
+
+
+# ---------------------------------------------------------------------------
+# Per-page segmentation failures must not lose the whole document
+# ---------------------------------------------------------------------------
+
+
+class _FlakySegmenter(HeuristicSegmenter):
+    """Raises on one page, behaves normally on the rest."""
+
+    name = "flaky"
+
+    def __init__(self, fail_on_call: int = 1):
+        super().__init__()
+        self.calls = 0
+        self.fail_on_call = fail_on_call
+
+    def segment(self, page_image):
+        self.calls += 1
+        if self.calls == self.fail_on_call:
+            # The shape DECIMER-Segmentation actually fails with: an empty mask
+            # reaching np.where(rows)[0][[0, -1]] in get_masked_image_optimized.
+            raise RuntimeError("index 0 is out of bounds for axis 0 with size 0")
+        return super().segment(page_image)
+
+
+def test_one_bad_page_does_not_lose_the_document(corpus, tmp_path):
+    matcher = MoleculeMatcher([parse_query(CAFFEINE)], modes=["exact"])
+    finder = _finder(tmp_path, [CAFFEINE], matcher, scan_text=False)
+    finder._segmenter = _FlakySegmenter(fail_on_call=1)   # page 1 blows up
+
+    results = finder.search([Document(path=corpus / "example_patent.pdf", dpi=150)])
+
+    extraction = results["extractions"][0]
+    assert extraction.failed_pages == [1]
+    assert extraction.page_count == 2
+    # Page 2 still produced a hit.
+    assert results["hits"], "page 2 should still have been processed"
+    assert results["documents"][0]["failed_pages"] == 1
+    assert "skipped after segmentation errors" in format_summary(results)
+
+
+def test_every_page_failing_raises_rather_than_reporting_nothing(corpus, tmp_path):
+    """All pages failing is a broken setup - do not report a quiet 'no match'."""
+    matcher = MoleculeMatcher([parse_query(ASPIRIN)], modes=["exact"])
+    finder = _finder(tmp_path, [ASPIRIN], matcher, scan_text=False)
+
+    class _AlwaysFails(HeuristicSegmenter):
+        def segment(self, page_image):
+            raise RuntimeError("index 0 is out of bounds for axis 0 with size 0")
+
+    finder._segmenter = _AlwaysFails()
+    with pytest.raises(RuntimeError, match="all 2 page"):
+        finder.search([Document(path=corpus / "example_patent.pdf", dpi=150)])
+
+
+def test_engine_configuration_errors_are_not_swallowed(corpus, tmp_path):
+    """A missing engine must stop the run, not look like 60 bad pages."""
+    matcher = MoleculeMatcher([parse_query(ASPIRIN)], modes=["exact"])
+    finder = _finder(tmp_path, [ASPIRIN], matcher, scan_text=False)
+
+    class _NotInstalled(HeuristicSegmenter):
+        def segment(self, page_image):
+            raise ImportError("DECIMER-Segmentation is not installed.")
+
+    finder._segmenter = _NotInstalled()
+    with pytest.raises(ImportError, match="not installed"):
+        finder.search([Document(path=corpus / "example_patent.pdf", dpi=150)])
