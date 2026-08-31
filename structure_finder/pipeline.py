@@ -31,7 +31,7 @@ from .recognition import Prediction, build_recognizer
 from .segmentation import Region, build_segmenter
 from .storage import Workspace
 
-CACHE_VERSION = 3
+CACHE_VERSION = 4
 
 
 @dataclass
@@ -67,6 +67,7 @@ class DocumentExtraction:
     text_inchikeys: List[str] = field(default_factory=list)
     config: Dict[str, object] = field(default_factory=dict)
     runtime_seconds: float = 0.0
+    failed_pages: List[int] = field(default_factory=list)
     cache_version: int = CACHE_VERSION
 
     def as_dict(self) -> Dict[str, object]:
@@ -76,6 +77,7 @@ class DocumentExtraction:
             "page_count": self.page_count,
             "config": self.config,
             "runtime_seconds": round(self.runtime_seconds, 2),
+            "failed_pages": self.failed_pages,
             "text_smiles": self.text_smiles,
             "text_inchikeys": self.text_inchikeys,
             "figures": [figure.as_dict() for figure in self.figures],
@@ -91,6 +93,7 @@ class DocumentExtraction:
             text_inchikeys=list(payload.get("text_inchikeys", [])),
             config=dict(payload.get("config", {})),
             runtime_seconds=float(payload.get("runtime_seconds", 0.0)),
+            failed_pages=list(payload.get("failed_pages", [])),
             cache_version=int(payload.get("cache_version", 0)),
         )
 
@@ -159,6 +162,26 @@ _INCHI_RE = re.compile(r"InChI=1S?/[^\s,;\)\]]+")
 _SMILES_CANDIDATE_RE = re.compile(
     r"(?<![A-Za-z0-9])((?=[^\s]{6,})[A-Za-z0-9@\+\-\[\]\(\)=#\\/%\.]{6,})(?![A-Za-z0-9])"
 )
+
+
+def _is_engine_configuration_error(error: Exception) -> bool:
+    """True when an error means the engine is unusable, not the page unreadable.
+
+    A missing package or an un-switchable Keras cannot be fixed by moving to the
+    next page, so those must stop the run instead of being counted as 59 page
+    failures in a row.
+    """
+    if isinstance(error, ImportError):
+        return True
+    text = str(error)
+    markers = (
+        "is not installed",
+        "needs Keras 2",
+        "LegacyKerasUnavailable",
+        "Restart the session",
+        "restart the session",
+    )
+    return any(marker in text for marker in markers)
 
 
 def _balanced_candidate(candidate: str) -> Optional[str]:
@@ -332,17 +355,51 @@ class StructureFinder:
 
         text_parts: List[str] = []
         page_index = 0
+        failed_pages: List[int] = []
+        first_error: Optional[Exception] = None
         for page in document.pages(self.config.pages):
             page_index += 1
             if page.text:
                 text_parts.append(page.text)
-            figures = self._process_page(page)
+            try:
+                figures = self._process_page(page)
+            except (ImportError, RuntimeError) as error:
+                # An engine that cannot load at all is systematic, not a
+                # property of this page - let it stop the run rather than
+                # reporting "0 images found" on every page in turn.
+                if _is_engine_configuration_error(error):
+                    raise
+                # Otherwise contain it: DECIMER-Segmentation can raise on an
+                # individual page (an empty mask trips an unguarded
+                # np.where(...)[0][[0, -1]] in get_masked_image_optimized), and
+                # one bad page in a 60-page patent must not lose the other 59.
+                failed_pages.append(page.number)
+                first_error = first_error or error
+                self._log(
+                    f"{document.name} page {page.number}: SKIPPED - "
+                    f"segmentation failed ({type(error).__name__})"
+                )
+                continue
             extraction.figures.extend(figures)
             self._log(
                 f"{document.name} page {page.number}: "
                 f"{len(figures)} chemical image(s)"
             )
         extraction.page_count = page_index
+        extraction.failed_pages = failed_pages
+
+        if failed_pages and len(failed_pages) == page_index and first_error:
+            # Every single page failed: that is a broken setup, not bad luck.
+            raise RuntimeError(
+                f"Segmentation failed on all {page_index} page(s) of "
+                f"{document.name}. This is a configuration problem rather than "
+                f"a property of the document.\nFirst error: {first_error}"
+            ) from first_error
+        if failed_pages:
+            self._log(
+                f"{document.name}: {len(failed_pages)} page(s) skipped after "
+                f"segmentation errors: {failed_pages}"
+            )
 
         if self.config.scan_text:
             text = "\n".join(text_parts) or document.full_text()
@@ -472,6 +529,7 @@ class StructureFinder:
                         for hit in hits
                         if hit.document == extraction.document["filename"]
                     ),
+                    "failed_pages": len(extraction.failed_pages),
                     "runtime_seconds": round(extraction.runtime_seconds, 2),
                 }
                 for extraction in extractions
