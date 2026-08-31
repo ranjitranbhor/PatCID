@@ -436,3 +436,40 @@ def test_numpy2_shim_noop_on_numpy1(monkeypatch):
         np, "VisibleDeprecationWarning", UserWarning, raising=False
     )
     assert compat.apply_numpy2_shims() is False
+
+
+# ---------------------------------------------------------------------------
+# Input handling: a bare path must not be iterated character by character
+# ---------------------------------------------------------------------------
+
+
+def test_collect_documents_accepts_a_bare_string_path(corpus):
+    """A string is iterable, so `for item in inputs` would yield characters.
+
+    Passing one used to fail with "No such file or directory: c", which gives
+    the user no idea what went wrong.
+    """
+    documents = collect_documents(str(corpus))
+    assert sorted(d.name for d in documents) == [
+        "example_patent.pdf",
+        "text_only.pdf",
+    ]
+
+
+def test_collect_documents_accepts_a_bare_path_object(corpus):
+    assert collect_documents(corpus)
+
+
+def test_collect_documents_accepts_a_single_file_path(corpus):
+    documents = collect_documents(corpus / "example_patent.pdf")
+    assert [d.name for d in documents] == ["example_patent.pdf"]
+
+
+def test_collect_documents_rejects_non_paths_clearly():
+    with pytest.raises(TypeError, match="must be a path"):
+        collect_documents([123])
+
+
+def test_collect_documents_still_accepts_a_list(corpus):
+    documents = collect_documents([str(corpus / "text_only.pdf")])
+    assert [d.name for d in documents] == ["text_only.pdf"]
