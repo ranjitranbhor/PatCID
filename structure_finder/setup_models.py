@@ -51,6 +51,11 @@ def fetch_decimer(workspace) -> str:
 
 
 def fetch_decimer_segmentation(workspace) -> str:
+    # decimer_segmentation touches np.VisibleDeprecationWarning at import time,
+    # which numpy 2.0 removed. Restore it first; see compat.py.
+    from .compat import apply_numpy2_shims
+
+    apply_numpy2_shims()
     from decimer_segmentation import get_model
 
     get_model()
@@ -97,12 +102,20 @@ def main(argv: List[str] | None = None) -> int:
         print(f"\n== {engine} ==")
         try:
             print(FETCHERS[engine](workspace))
+        except ImportError as error:
+            failures += 1
+            print(f"FAILED: {error}", file=sys.stderr)
+            print(
+                "  The package is not installed. See "
+                "requirements-structure-finder.txt.",
+                file=sys.stderr,
+            )
         except Exception as error:
             failures += 1
             print(f"FAILED: {error}", file=sys.stderr)
             print(
-                "  (Install the corresponding package first; see "
-                "requirements-structure-finder.txt)",
+                "  The package imported, so this is most likely a network or "
+                "disk problem while downloading the weights. Re-run to retry.",
                 file=sys.stderr,
             )
     return 1 if failures else 0
