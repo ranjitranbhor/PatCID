@@ -28,6 +28,14 @@ Quick start
 
 from __future__ import annotations
 
+import os
+
+# DECIMER-Segmentation loads its Mask R-CNN .h5 through a code path that needs
+# Keras 2 (see structure_finder/compat.py). TensorFlow reads this variable when
+# it is first imported, so set it here - importing structure_finder before
+# tensorflow is the earliest reliable hook. Harmless when tf-keras is absent.
+os.environ.setdefault("TF_USE_LEGACY_KERAS", "1")
+
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 

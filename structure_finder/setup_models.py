@@ -53,9 +53,10 @@ def fetch_decimer(workspace) -> str:
 def fetch_decimer_segmentation(workspace) -> str:
     # decimer_segmentation touches np.VisibleDeprecationWarning at import time,
     # which numpy 2.0 removed. Restore it first; see compat.py.
-    from .compat import apply_numpy2_shims
+    from .compat import apply_numpy2_shims, enable_legacy_keras
 
     apply_numpy2_shims()
+    enable_legacy_keras()
     from decimer_segmentation import get_model
 
     get_model()
