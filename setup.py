@@ -23,6 +23,22 @@ setuptools.setup(
         "matplotlib",
         "pillow"
     ],
+    extras_require={
+        # structure_finder: search a query structure inside your own documents.
+        # See STRUCTURE_FINDER.md. Model-backed engines (MolGrapher, DECIMER,
+        # DECIMER-Segmentation, MolClassifier) are installed separately.
+        "structure-finder": [
+            "pymupdf>=1.24",
+            "numpy>=1.23",
+            "opencv-python>=4.8",
+            "python-docx>=1.1",
+        ],
+    },
+    entry_points={
+        "console_scripts": [
+            "structure-finder = structure_finder.cli:main",
+        ],
+    },
     classifiers=[
         "Development Status :: 1 - Planning",
         "Intended Audience :: Developers",

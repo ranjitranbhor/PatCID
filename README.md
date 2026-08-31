@@ -67,6 +67,26 @@ https://github.com/DS4SD/PatCID/assets/73230090/0fc7c2bd-ce1b-4ded-a278-7d9c4c27
 
 To request access to the above user interface, please contact the IBM's [Deep Search](https://ds4sd.github.io/) team at deepsearch-core@zurich.ibm.com.
 
+### Search Your Own Documents (`structure_finder`)
+
+The PatCID dataset covers patent documents already ingested by IBM. To run the
+same ingestion pipeline over documents *you* supply - and find where a given
+molecule is drawn in them - use `structure_finder`:
+
+```
+python -m structure_finder --smiles "CC(=O)Oc1ccccc1C(=O)O" my_patent.pdf report.docx
+```
+
+It segments (DECIMER-Segmentation), classifies (MolClassifier) and recognises
+(MolGrapher or DECIMER) every chemical image in your PDFs and Word documents,
+matches the result against your query with RDKit, and reports the document, page
+and bounding box of each hit. Models and per-document extraction caches can live
+on Google Drive, and a Colab notebook is provided for the upload-and-search
+workflow.
+
+See [STRUCTURE_FINDER.md](./STRUCTURE_FINDER.md) and
+[`notebooks/find_structure_in_documents.ipynb`](./notebooks/find_structure_in_documents.ipynb).
+
 ### Benchmark Datasets
 
 The benchmarks datasets [D2C-UNI and D2C-RND are available on Zenodo](https://doi.org/10.5281/zenodo.10978812).

@@ -1,0 +1,33 @@
+# Dependencies for structure_finder (see STRUCTURE_FINDER.md).
+#
+# --- Core: matching, document handling, reporting ---------------------------
+# These alone give you the text scan, the heuristic segmenter and all reporting.
+rdkit>=2023.9
+pymupdf>=1.24
+numpy>=1.23
+pillow>=9.0
+opencv-python>=4.8
+python-docx>=1.1        # optional: text extraction from .docx
+
+# --- Recognition: MolGrapher (PatCID's choice, CPU-friendly) ----------------
+# Install from a checkout, which lets you pick the CPU or GPU torch build:
+#   git clone https://github.com/DS4SD/MolGrapher && cd MolGrapher
+#   pip install -e ".[cpu]"        # or ".[gpu]"
+#   bash install_paddleocr.sh
+# molgrapher @ git+https://github.com/DS4SD/MolGrapher
+
+# --- Recognition: DECIMER Image Transformer (alternative / ensemble) --------
+# decimer>=2.8
+
+# --- Segmentation: DECIMER-Segmentation (PatCID's choice) ------------------
+# decimer-segmentation>=1.5
+
+# --- Classification: MolClassifier (Clean / Markush / Trash) ---------------
+# git clone https://github.com/DS4SD/MolClassifier
+# pip install torch torchvision pycocotools albumentations imantics more-itertools
+# NOTE: MolClassifier imports `albumentations_transforms` as a top-level module,
+# so BOTH the repo root and the mol_classifier/ directory must be on PYTHONPATH:
+#   export PYTHONPATH=/path/to/MolClassifier:/path/to/MolClassifier/mol_classifier
+
+# --- Tests -----------------------------------------------------------------
+# pytest>=7
