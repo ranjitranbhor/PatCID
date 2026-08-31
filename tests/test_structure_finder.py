@@ -386,3 +386,53 @@ def test_cli_page_parsing():
     assert parse_pages("1-3,7") == [1, 2, 3, 7]
     assert parse_pages(None) is None
     assert parse_pages("2") == [2]
+
+
+# ---------------------------------------------------------------------------
+# numpy 2 compatibility shim (DECIMER-Segmentation)
+# ---------------------------------------------------------------------------
+
+
+def test_numpy2_shim_restores_visible_deprecation_warning(monkeypatch):
+    """decimer_segmentation touches np.VisibleDeprecationWarning at import time.
+
+    numpy 2.0 removed it, so without the shim merely importing the package
+    raises AttributeError. The shim must restore a warning class that behaves
+    the same way for `warnings.filterwarnings`.
+    """
+    import warnings
+
+    import numpy as np
+
+    import structure_finder.compat as compat
+
+    monkeypatch.setattr(compat, "_APPLIED", False, raising=False)
+    monkeypatch.delattr(np, "VisibleDeprecationWarning", raising=False)
+    assert not hasattr(np, "VisibleDeprecationWarning")
+
+    assert compat.apply_numpy2_shims() is True
+    assert issubclass(np.VisibleDeprecationWarning, UserWarning)
+
+    # The package's only use of it is this call; it must not raise.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
+
+
+def test_numpy2_shim_is_idempotent(monkeypatch):
+    import structure_finder.compat as compat
+
+    monkeypatch.setattr(compat, "_APPLIED", False, raising=False)
+    compat.apply_numpy2_shims()
+    assert compat.apply_numpy2_shims() is False
+
+
+def test_numpy2_shim_noop_on_numpy1(monkeypatch):
+    import numpy as np
+
+    import structure_finder.compat as compat
+
+    monkeypatch.setattr(compat, "_APPLIED", False, raising=False)
+    monkeypatch.setattr(
+        np, "VisibleDeprecationWarning", UserWarning, raising=False
+    )
+    assert compat.apply_numpy2_shims() is False

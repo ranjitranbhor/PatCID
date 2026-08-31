@@ -80,14 +80,17 @@ in Colab — it installs everything, mounts Drive, takes uploads and runs the
 search. Two runtime facts drive the setup there:
 
 - **`pip install decimer-segmentation` fails on Colab, and the notebook works
-  around it.** Its metadata caps `tensorflow<=2.15.1`, and TensorFlow has no
-  CPython 3.12 wheel below 2.16, so on Colab's Python that constraint cannot be
-  satisfied and pip reports `ResolutionImpossible` across every version. The
-  real constraint is **numpy < 2** — the Mask R-CNN uses
-  `np.VisibleDeprecationWarning`, removed in numpy 2.0. With numpy 1.26.4 the
-  model builds correctly on TensorFlow 2.19.1, so the notebook pins numpy,
-  installs the package with `--no-deps`, and supplies its dependencies itself.
-  Pinning numpy needs one session restart, which the install cell performs.
+  around it.** Its metadata caps `tensorflow<=2.15.1`; TensorFlow ships no wheel
+  in that range for Colab's Python (3.13 — cp313 wheels start at TF 2.20), so
+  pip reports `ResolutionImpossible` across every version. The cap is really a
+  proxy for **numpy < 2** (the package touches `np.VisibleDeprecationWarning`,
+  removed in numpy 2.0) — but numpy only supports Python 3.13 from 2.1, so
+  pinning numpy<2 is not a way out either: pip compiles numpy from source into a
+  build predating the interpreter. Instead, `structure_finder/compat.py` restores
+  that one attribute (its only use is a cosmetic `warnings.filterwarnings` call,
+  and it is the package's only numpy-2 incompatibility) and the notebook installs
+  with `--no-deps`. Verified on numpy 2.1.3 + TensorFlow 2.19.1. No numpy pin, no
+  session restart.
 - **Use the DECIMER recognition engine on Colab.** MolGrapher's `setup.py`
   constructs torch wheel URLs pinned to CPython 3.11, so `pip install -e ".[cpu]"`
   fails on Colab's current Python. DECIMER is pip-installable there and actually

@@ -70,12 +70,19 @@ class DecimerSegmenter(BaseSegmenter):
 
     def _load(self):
         if self._segment_fn is None:
+            # decimer_segmentation touches np.VisibleDeprecationWarning at import
+            # time, which numpy 2.0 removed. Restore it first; see compat.py.
+            from .compat import apply_numpy2_shims
+
+            apply_numpy2_shims()
             try:
                 from decimer_segmentation import segment_chemical_structures
             except ImportError as error:  # pragma: no cover - import guard
                 raise ImportError(
                     "DECIMER-Segmentation is not installed. "
-                    "Install it with: pip install decimer-segmentation"
+                    "Install it with: pip install --no-deps decimer-segmentation\n"
+                    "(--no-deps avoids its unsatisfiable tensorflow<=2.15.1 cap; "
+                    "see requirements-structure-finder.txt for the dependency list.)"
                 ) from error
             self._segment_fn = segment_chemical_structures
         return self._segment_fn
