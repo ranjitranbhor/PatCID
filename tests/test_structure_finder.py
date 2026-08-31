@@ -530,7 +530,12 @@ def test_legacy_keras_error_names_the_remedy(monkeypatch):
 
     from structure_finder.compat import LegacyKerasUnavailable, enable_legacy_keras
 
-    fake_tf = types.SimpleNamespace(keras=types.SimpleNamespace(__name__="keras.api"))
+    # No tf.keras.layers, so the behavioural check reports "not active".
+    fake_tf = types.SimpleNamespace(
+        __version__="2.20.0",
+        Variable=type("V", (), {}),
+        keras=types.SimpleNamespace(__name__="keras.api"),
+    )
     real_import = builtins.__import__
 
     def fake_import(name, *args, **kwargs):
@@ -611,3 +616,51 @@ def test_engine_configuration_errors_are_not_swallowed(corpus, tmp_path):
     finder._segmenter = _NotInstalled()
     with pytest.raises(ImportError, match="not installed"):
         finder.search([Document(path=corpus / "example_patent.pdf", dpi=150)])
+
+
+def test_legacy_keras_detection_is_behavioural_not_name_based():
+    """Two name-based checks were tried before this one and both were wrong.
+
+    `tf.keras.__name__` reverts to "tensorflow.keras" once anything imports
+    tensorflow.keras (mrcnn does), and `"tf_keras" in sys.modules` stays true
+    even when TensorFlow imported tf-keras, rejected it on a version mismatch
+    and fell back to Keras 3. So the check asks the question mrcnn's h5 loader
+    actually asks: are layer weights tf.Variable?
+    """
+    import types
+
+    from structure_finder.compat import _legacy_keras_is_active
+
+    class TFVariable:      # Keras 2 hands these back
+        pass
+
+    class KerasVariable:   # Keras 3 hands these back; the h5 loader refuses them
+        pass
+
+    def fake_tf(weight_cls):
+        layer = types.SimpleNamespace(
+            build=lambda shape: None, weights=[weight_cls(), weight_cls()]
+        )
+        return types.SimpleNamespace(
+            Variable=TFVariable,
+            keras=types.SimpleNamespace(
+                layers=types.SimpleNamespace(Dense=lambda units: layer)
+            ),
+        )
+
+    assert _legacy_keras_is_active(fake_tf(TFVariable)) is True
+    assert _legacy_keras_is_active(fake_tf(KerasVariable)) is False
+    # A broken or absent tf.keras must report "not active", not explode.
+    assert _legacy_keras_is_active(
+        types.SimpleNamespace(Variable=TFVariable, keras=None)
+    ) is False
+
+
+def test_tensorflow_minor_pins_tf_keras_correctly():
+    """tf-keras must match TensorFlow's major.minor or TF falls back silently."""
+    import types
+
+    from structure_finder.compat import _tensorflow_minor
+
+    assert _tensorflow_minor(types.SimpleNamespace(__version__="2.20.0")) == "2.20"
+    assert _tensorflow_minor(types.SimpleNamespace(__version__="2.19.1")) == "2.19"

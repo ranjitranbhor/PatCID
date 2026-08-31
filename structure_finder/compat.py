@@ -132,40 +132,84 @@ def enable_legacy_keras() -> bool:
     except ImportError:
         return False
 
-    # Two signals, because neither alone is reliable:
-    #
-    #  * tf.keras.__name__ says "tf_keras..." only until something does
-    #    `import tensorflow.keras` - which mrcnn/model.py does. That binds a
-    #    real tensorflow.keras module and the name reverts to
-    #    "tensorflow.keras" even though Keras 2 is still underneath.
-    #  * tf_keras in sys.modules is what TensorFlow itself imports when it
-    #    honours TF_USE_LEGACY_KERAS, so it survives that rebinding.
-    #
-    # The result is then memoised: once legacy Keras is in force for this
-    # interpreter it cannot silently revert, and re-deriving it would hit the
-    # name problem above.
-    name = getattr(getattr(tf, "keras", None), "__name__", "")
-    if name.startswith("tf_keras") or "tf_keras" in sys.modules:
+    if _legacy_keras_is_active(tf):
         _LEGACY_KERAS_ACTIVE = True
         return True
 
-    # tf.keras is still Keras 3, so the switch did not take effect.
+    # Not active. Work out which of the two causes it is, because the remedies
+    # differ, and say so precisely.
     try:
-        import tf_keras  # noqa: F401
+        import tf_keras
+
+        installed = getattr(tf_keras, "__version__", "unknown")
     except ImportError as error:
         raise LegacyKerasUnavailable(
             "DECIMER-Segmentation needs Keras 2 to load its .h5 weights, but "
             "the 'tf-keras' package is not installed.\n"
-            "  pip install tf-keras\n"
+            f"  pip install 'tf-keras~={_tensorflow_minor(tf)}.0'\n"
             "then restart the Python session."
         ) from error
 
+    if already_imported:
+        raise LegacyKerasUnavailable(
+            "DECIMER-Segmentation needs Keras 2 to load its .h5 weights. "
+            "TensorFlow was already imported before TF_USE_LEGACY_KERAS could "
+            "be set, and TensorFlow reads that variable only at import time.\n"
+            "Restart the session (in Colab: Runtime -> Restart session) and run "
+            "again. Importing structure_finder before tensorflow sets it early "
+            "enough."
+        )
+
     raise LegacyKerasUnavailable(
-        "DECIMER-Segmentation needs Keras 2 to load its .h5 weights. "
-        "'tf-keras' is installed, but TensorFlow was "
-        + ("already imported before TF_USE_LEGACY_KERAS could be set"
-           if already_imported else "imported under Keras 3")
-        + ".\nTensorFlow reads that variable at import time, so restart the "
-        "session (in Colab: Runtime -> Restart session) and run again. "
-        "Importing structure_finder before tensorflow sets it early enough."
+        "DECIMER-Segmentation needs Keras 2 to load its .h5 weights, and the "
+        "switch to it did not take effect.\n"
+        f"  tensorflow {getattr(tf, '__version__', 'unknown')}"
+        f"  +  tf-keras {installed}\n"
+        "tf-keras must match TensorFlow's major.minor version. When it does "
+        "not, TensorFlow imports it, rejects it, and silently falls back to "
+        "Keras 3 - which is what has happened here. Install the matching "
+        "build and restart the session:\n"
+        f"  pip install 'tf-keras~={_tensorflow_minor(tf)}.0'"
+    )
+
+
+def _tensorflow_minor(tf, default: str = "2.20") -> str:
+    """``2.20`` from ``2.20.0`` - the version tf-keras must be pinned to.
+
+    Falls back to ``default`` rather than raising: this only ever runs while
+    building an error message, and an AttributeError there would replace a
+    useful diagnosis with a useless one.
+    """
+    raw = getattr(tf, "__version__", None)
+    if not raw:
+        return default
+    parts = str(raw).split(".")
+    return ".".join(parts[:2]) if len(parts) >= 2 else default
+
+
+def _legacy_keras_is_active(tf) -> bool:
+    """Is ``tf.keras`` really Keras 2?
+
+    Tested by behaviour, not by name.  Two name-based checks were tried first
+    and both gave wrong answers:
+
+    * ``tf.keras.__name__`` reverts to ``"tensorflow.keras"`` as soon as
+      anything does ``import tensorflow.keras`` - which ``mrcnn/model.py``
+      does - even while Keras 2 is still underneath (false negative).
+    * ``"tf_keras" in sys.modules`` is true even when TensorFlow imported
+      tf-keras, found a version mismatch and fell back to Keras 3 (false
+      positive).
+
+    So ask the question mrcnn's loader actually asks: are layer weights
+    ``tf.Variable``?  Keras 3 uses ``keras.Variable`` and the h5 loader
+    refuses those.
+    """
+    try:
+        layer = tf.keras.layers.Dense(1)
+        layer.build((None, 1))
+        weights = list(layer.weights)
+    except Exception:
+        return False
+    return bool(weights) and all(
+        isinstance(weight, tf.Variable) for weight in weights
     )

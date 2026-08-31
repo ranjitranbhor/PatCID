@@ -51,7 +51,9 @@ on CPU, DECIMER scored slightly higher on D2C-RND):
 # because the Mask R-CNN .h5 can only be loaded under Keras 2.
 pip install --no-deps decimer-segmentation
 pip install scikit-image opencv-python matplotlib IPython PyMuPDF numba scipy requests
-pip install tf-keras
+# tf-keras must match TensorFlow's major.minor, or TensorFlow silently
+# falls back to Keras 3 and the weight load fails as if it were absent.
+pip install "tf-keras~=$(python -c 'import tensorflow as tf; print(".".join(tf.__version__.split(".")[:2]))').0"
 
 # recognition, option A: MolGrapher
 git clone https://github.com/DS4SD/MolGrapher && cd MolGrapher
@@ -103,8 +105,11 @@ search. Two runtime facts drive the setup there:
   `structure_finder` sets `TF_USE_LEGACY_KERAS=1` when you import it, which
   points `tf.keras` back at Keras 2 — but TensorFlow reads that variable at
   **its** import time, so import `structure_finder` before `tensorflow`.
-  Verified on TensorFlow 2.19.1: `load_weights(by_name=True)` succeeds under
-  legacy Keras and fails under Keras 3.
+  **`tf-keras` must match TensorFlow's major.minor.** A mismatched build is
+  imported, rejected and silently replaced by Keras 3 — failing exactly as if
+  it were not installed; the notebook pins it from the installed TensorFlow
+  version. Verified on TensorFlow 2.19.1 and 2.20.0: `load_weights(by_name=True)`
+  succeeds under legacy Keras and fails under Keras 3.
 - **Use the DECIMER recognition engine on Colab.** MolGrapher's `setup.py`
   constructs torch wheel URLs pinned to CPython 3.11, so `pip install -e ".[cpu]"`
   fails on Colab's current Python. DECIMER is pip-installable there and actually
@@ -309,7 +314,7 @@ Practical consequences:
 python -m pytest tests/test_structure_finder.py -v
 ```
 
-42 tests covering matching semantics, PDF/DOCX handling, the text scan,
+44 tests covering matching semantics, PDF/DOCX handling, the text scan,
 segmentation, caching, reporting, annotation, the numpy 2 and Keras 3
 compatibility shims, and per-page failure containment. They use a stub
 recognizer, so they run without any downloaded model weights.

@@ -49,9 +49,14 @@ python-docx>=1.1        # optional: text extraction from .docx
 #    which needs every layer weight to be a tf.Variable. Keras 3
 #    (TensorFlow >= 2.16) uses keras.Variable, so the load dies with
 #    "Save or restore weights that is not an instance of `tf.Variable`".
-#      pip install tf-keras
-#    Verified on TensorFlow 2.19.1: load_weights(by_name=True) succeeds
-#    under legacy Keras and fails under Keras 3.
+#    tf-keras MUST match TensorFlow's major.minor. A mismatched build is
+#    imported by TensorFlow, rejected, and silently replaced by Keras 3 -
+#    failing exactly as if it were absent. So pin it to the TensorFlow you
+#    actually have:
+#      pip install "tf-keras~=$(python -c 'import tensorflow as tf;\
+#          print(".".join(tf.__version__.split(".")[:2]))').0"
+#    Verified: load_weights(by_name=True) succeeds under legacy Keras and
+#    fails under Keras 3, on TensorFlow 2.19.1 and 2.20.0.
 
 # --- Classification: MolClassifier (Clean / Markush / Trash) ---------------
 # git clone https://github.com/DS4SD/MolClassifier
