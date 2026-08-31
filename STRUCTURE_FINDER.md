@@ -47,7 +47,11 @@ on CPU, DECIMER scored slightly higher on D2C-RND):
 
 ```bash
 # segmentation (PatCID's choice)
-pip install decimer-segmentation
+# --no-deps skips an unsatisfiable tensorflow cap; tf-keras is needed
+# because the Mask R-CNN .h5 can only be loaded under Keras 2.
+pip install --no-deps decimer-segmentation
+pip install scikit-image opencv-python matplotlib IPython PyMuPDF numba scipy requests
+pip install tf-keras
 
 # recognition, option A: MolGrapher
 git clone https://github.com/DS4SD/MolGrapher && cd MolGrapher
@@ -91,6 +95,16 @@ search. Two runtime facts drive the setup there:
   and it is the package's only numpy-2 incompatibility) and the notebook installs
   with `--no-deps`. Verified on numpy 2.1.3 + TensorFlow 2.19.1. No numpy pin, no
   session restart.
+- **`tf-keras` is required, not optional.** DECIMER-Segmentation loads its
+  Mask R-CNN weights through `hdf5_format.load_weights_from_hdf5_group_by_name`,
+  which requires every layer weight to be a `tf.Variable`. Keras 3 (TensorFlow
+  ≥ 2.16) uses `keras.Variable`, so the load fails with *"Save or restore
+  weights that is not an instance of `tf.Variable` is not supported in h5"*.
+  `structure_finder` sets `TF_USE_LEGACY_KERAS=1` when you import it, which
+  points `tf.keras` back at Keras 2 — but TensorFlow reads that variable at
+  **its** import time, so import `structure_finder` before `tensorflow`.
+  Verified on TensorFlow 2.19.1: `load_weights(by_name=True)` succeeds under
+  legacy Keras and fails under Keras 3.
 - **Use the DECIMER recognition engine on Colab.** MolGrapher's `setup.py`
   constructs torch wheel URLs pinned to CPython 3.11, so `pip install -e ".[cpu]"`
   fails on Colab's current Python. DECIMER is pip-installable there and actually
@@ -283,6 +297,9 @@ Practical consequences:
 - **Confidence is a useful filter.** MolGrapher's `conf` and DECIMER's mean
   token confidence are in every record; `--min-confidence 0.8` trades recall for
   precision.
+- **A page that trips an upstream bug is skipped, not fatal.** The summary has a
+  `skip` column and the page numbers land in `failed_pages` in the extractions
+  file, so a partial result is never mistaken for a clean one.
 
 ---
 
@@ -292,9 +309,10 @@ Practical consequences:
 python -m pytest tests/test_structure_finder.py -v
 ```
 
-28 tests covering matching semantics, PDF/DOCX handling, the text scan,
-segmentation, caching, reporting and annotation. They use a stub recognizer, so
-they run without any downloaded model weights.
+42 tests covering matching semantics, PDF/DOCX handling, the text scan,
+segmentation, caching, reporting, annotation, the numpy 2 and Keras 3
+compatibility shims, and per-page failure containment. They use a stub
+recognizer, so they run without any downloaded model weights.
 
 ---
 
