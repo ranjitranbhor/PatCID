@@ -281,12 +281,28 @@ def _docx_text(path: Path) -> str:
 
 
 def collect_documents(
-    inputs: List[str], dpi: int = DEFAULT_DPI, recursive: bool = True
+    inputs, dpi: int = DEFAULT_DPI, recursive: bool = True
 ) -> List[Document]:
-    """Expand files and directories into a list of :class:`Document`."""
+    """Expand files and directories into a list of :class:`Document`.
+
+    Args:
+        inputs: A path, or an iterable of paths, to files and/or directories.
+            A single path may be given as a bare string or ``Path`` - iterating
+            a string yields characters, so accepting one explicitly avoids a
+            baffling "No such file or directory: c" further down.
+    """
+    if isinstance(inputs, (str, Path)):
+        inputs = [inputs]
+    else:
+        inputs = list(inputs)
+
     documents: List[Document] = []
     seen: set = set()
     for item in inputs:
+        if not isinstance(item, (str, Path)):
+            raise TypeError(
+                f"Each input must be a path, got {type(item).__name__}: {item!r}"
+            )
         path = Path(item).expanduser()
         if path.is_dir():
             pattern = "**/*" if recursive else "*"
