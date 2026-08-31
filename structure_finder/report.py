@@ -83,7 +83,7 @@ def format_summary(results: Dict[str, object]) -> str:
     lines.append("Documents processed:")
     header = (
         f"  {'document':<44}{'pages':>6}{'images':>8}{'SMILES':>8}"
-        f"{'Markush':>9}{'hits':>6}{'sec':>8}"
+        f"{'Markush':>9}{'hits':>6}{'skip':>6}{'sec':>8}"
     )
     lines.append(header)
     lines.append("  " + "-" * (len(header) - 2))
@@ -95,9 +95,18 @@ def format_summary(results: Dict[str, object]) -> str:
             f"{document['recognised_structures']:>8}"
             f"{document['markush_images']:>9}"
             f"{document['hits']:>6}"
+            f"{document.get('failed_pages', 0):>6}"
             f"{document['runtime_seconds']:>8.1f}"
         )
     lines.append("")
+
+    skipped = sum(d.get("failed_pages", 0) for d in results.get("documents", []))
+    if skipped:
+        lines.append(
+            f"NOTE: {skipped} page(s) were skipped after segmentation errors; "
+            "they are listed as failed_pages in the extractions file."
+        )
+        lines.append("")
 
     hits = results.get("hits", [])
     if not hits:
