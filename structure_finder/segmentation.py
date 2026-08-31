@@ -72,9 +72,12 @@ class DecimerSegmenter(BaseSegmenter):
         if self._segment_fn is None:
             # decimer_segmentation touches np.VisibleDeprecationWarning at import
             # time, which numpy 2.0 removed. Restore it first; see compat.py.
-            from .compat import apply_numpy2_shims
+            from .compat import apply_numpy2_shims, enable_legacy_keras
 
             apply_numpy2_shims()
+            # ... and its weight loader needs Keras 2; raises with restart
+            # instructions if that can no longer be arranged.
+            enable_legacy_keras()
             try:
                 from decimer_segmentation import segment_chemical_structures
             except ImportError as error:  # pragma: no cover - import guard
